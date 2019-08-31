@@ -1,0 +1,24 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Net3dBool;
+
+namespace N3dBoolExample {
+    public class BooleanExample : MonoBehaviour
+    {
+        public MeshFilter meshFa;
+        public MeshFilter meshFb;
+
+        private void Start()
+        {
+            var faCollider = meshFa.GetComponent<MeshCollider>();
+
+            var difference = MeshBooleanOperator.GetDifference(meshFa, meshFb);
+            meshFa.mesh = difference;
+            faCollider.sharedMesh = meshFa.mesh;
+
+            faCollider.convex = true;
+            meshFa.gameObject.AddComponent<Rigidbody>();
+        }
+    }
+}
