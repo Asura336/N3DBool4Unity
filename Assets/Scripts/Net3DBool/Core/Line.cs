@@ -165,7 +165,7 @@ namespace Net3dBool
 #if DEBUG
                 throw new InvalidOperationException();
 #else
-				return Vector3.Zero;
+				return Vector3Double.Zero;
 #endif
             }
             return StartPoint + (Direction * t);
