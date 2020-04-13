@@ -30,19 +30,24 @@
 
 ```c#
 // 取两个 MeshFilter 的并集
-public static Mesh GetUnion(MeshFilter meshF1, MeshFilter meshF2)
+public static Mesh _GetUnion(MeshFilter meshF1, MeshFilter meshF2)
 {
-    BooleanModeller booleanModeller = 
-        new BooleanModeller(meshF1.ToSolidInWCS(), meshF2.ToSolidInWCS());
-    var end = booleanModeller.GetUnion();
-    end.translate((-meshF1.transform.position).ToVector3Double());
-    
-    ObjectFaceF objF = new ObjectFaceF(end.Vertices.ToVector3Arr(), end.Triangles);
-    objF.MergeNeighbors();
-    // 返回重计算 uv 后的 Mesh 网格
-    var result = objF.ToMesh();
-    result.SetUVinWCS();
-    return result;
+    using (var booleanModeller =
+        new BooleanModeller(meshF1.ToSolidInWCS(), meshF2.ToSolidInWCS()))
+    {
+        var end = booleanModeller.GetUnion();
+        end.translate((-meshF1.transform.position).ToVector3Double());
+
+        using (ObjectFaceF objF = 
+            ObjectFaceF.GetInstance(end.Vertices.ToVector3Arr(), end.Triangles))
+        {
+            objF.MergeNeighbors();
+            // 返回重计算 uv 后的 Mesh 网格
+            var result = objF.ToMesh();
+            result.SetUVinWCS();  // 按空间坐标投射 uv
+            return result;
+        }
+    }
 }
 ```
 
