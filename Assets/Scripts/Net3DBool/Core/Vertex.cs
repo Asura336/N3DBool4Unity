@@ -35,6 +35,8 @@ Optimized and refactored by: Lars Brubaker (larsbrubaker@matterhackers.com)
 Project: https://github.com/MatterHackers/agg-sharp (an included library)
 */
 
+using Net3dBool.CommonTool;
+using System;
 using System.Collections.Generic;
 
 namespace Net3dBool
@@ -42,23 +44,14 @@ namespace Net3dBool
     /// <summary>
     /// 表示 3D 面的顶点
     /// </summary>
-    public class Vertex
+    public class Vertex : IDisposable
     {
         public Vector3Double Position { get; private set; }
 
         /// <summary>
         ///通过边与自身相连的其他顶点
         /// </summary>
-        public Vertex[] AdjacentVertices
-        {
-            get
-            {
-                Vertex[] vertices = new Vertex[adjacentVertices.Count];
-                for (int i = 0; i < adjacentVertices.Count; i++) { vertices[i] = adjacentVertices[i]; }
-                return vertices;
-            }
-        }
-        private List<Vertex> adjacentVertices;
+        private readonly List<Vertex> adjacentVertices = new List<Vertex>();
 
         /// <summary>
         /// 顶点状态，相对于其他对象
@@ -73,85 +66,36 @@ namespace Net3dBool
         /// <summary>
         /// 公差，值的差小于此值认为相等
         /// </summary>
-        private readonly static double EqualityTolerance = 1e-5f;
+        public const double EqualityTolerance = 1e-5;
+
+        public static implicit operator Vector3Double(Vertex self) => self.Position;
 
         //----------------------------------CONSTRUCTORS--------------------------------//
-
-        /// <summary>
-        /// 构造状态未知的顶点
-        /// </summary>
-        /// <param name="position">顶点位置</param>
-        public Vertex(Vector3Double position)
-        {
-            Position = position;
-
-            adjacentVertices = new List<Vertex>();
-            status = Status.UNKNOWN;
-        }
-
-        /// <summary>
-        /// 构造状态未知的顶点
-        /// </summary>
-        /// <param name="x">顶点 x 坐标</param>
-        /// <param name="y">顶点 y 坐标</param>
-        /// <param name="z">顶点 z 坐标</param>
-        public Vertex(double x, double y, double z)
-        {
-            Position = new Vector3Double(x, y, z);
-
-            adjacentVertices = new List<Vertex>();
-            status = Status.UNKNOWN;
-        }
-
         /// <summary>
         /// 构造指定状态的顶点
         /// </summary>
         /// <param name="position">顶点坐标</param>
         /// <param name="status">顶点状态：未知，边界，内部 或 外部</param>
-        public Vertex(Vector3Double position, Status status)
+        public Vertex(Vector3Double position, Status status = Status.UNKNOWN)
+        {
+            InitMember(position, status);
+        }
+        public Vertex InitMember(Vector3Double position, Status status = Status.UNKNOWN)
         {
             Position = position;
-
-            adjacentVertices = new List<Vertex>();
             this.status = status;
+            disposedValue = false;
+            return this;
         }
-
-        /// <summary>
-        /// 构造指定状态的顶点
-        /// </summary>
-        /// <param name="x">顶点 x 坐标</param>
-        /// <param name="y">顶点 y 坐标</param>
-        /// <param name="z">顶点 z 坐标</param>
-        /// <param name="status">顶点状态：未知，边界，内部 或 外部</param>
-        public Vertex(double x, double y, double z, Status status)
+        public static Vertex GetInstane(Vector3Double position, Status status = Status.UNKNOWN)
         {
-            Position = new Vector3Double(x, y, z);
+            return ObjectPool<Vertex>.Create(initVertex, construct);
 
-            adjacentVertices = new List<Vertex>();
-            this.status = status;
+            void initVertex(Vertex c) => c.InitMember(position, status);
+            Vertex construct() => new Vertex(position, status);
         }
 
         private Vertex() { }
-
-        /// <summary>
-        /// 复制顶点对象
-        /// </summary>
-        /// <returns>复制体实例</returns>
-        public Vertex Clone()
-        {
-            Vertex clone = new Vertex
-            {
-                Position = Position,
-                status = status,
-                adjacentVertices = new List<Vertex>()
-            };
-            for (int i = 0; i < adjacentVertices.Count; i++)
-            {
-                clone.adjacentVertices.Add(adjacentVertices[i].Clone());
-            }
-
-            return clone;
-        }
 
         public override string ToString() { return Position.ToString(); }
 
@@ -160,7 +104,7 @@ namespace Net3dBool
         /// </summary>
         /// <param name="vertex"></param>
         /// <returns></returns>
-        public bool Equals(Vertex vertex) { return Position.Equals(vertex.Position, EqualityTolerance); }
+        public bool Equals(Vertex vertex) => Position.Equals(vertex.Position, EqualityTolerance);
 
         //----------------------------------OTHERS--------------------------------------//
 
@@ -183,10 +127,51 @@ namespace Net3dBool
         public void Mark(Status status)
         {
             this.status = status;  // 指定自身状态
-            Vertex[] adjacentVerts = AdjacentVertices;
-            for (int i = 0; i < adjacentVerts.Length; i++)  // 指定邻接点状态
-            { if (adjacentVerts[i].Status == Status.UNKNOWN) { adjacentVerts[i].Mark(status); } }
+            for (int i = 0; i < adjacentVertices.Count; i++)  // 指定邻接点状态
+            {
+                if (adjacentVertices[i].Status == Status.UNKNOWN)
+                {
+                    adjacentVertices[i].Mark(status);
+                }
+            }
         }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // 要检测冗余调用
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // TODO: 释放托管状态(托管对象)。
+                    adjacentVertices.Clear();
+                    ObjectPool<Vertex>.Recycle(this);
+                }
+
+                // TODO: 释放未托管的资源(未托管的对象)并在以下内容中替代终结器。
+                // TODO: 将大型字段设置为 null。
+
+                disposedValue = true;
+            }
+        }
+
+        // TODO: 仅当以上 Dispose(bool disposing) 拥有用于释放未托管资源的代码时才替代终结器。
+        // ~Vertex() {
+        //   // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+        //   Dispose(false);
+        // }
+
+        // 添加此代码以正确实现可处置模式。
+        public void Dispose()
+        {
+            // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+            Dispose(true);
+            // TODO: 如果在以上内容中替代了终结器，则取消注释以下行。
+            // GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }
 

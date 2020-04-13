@@ -1,6 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using Net3dBool.CommonTool;
+using System;
 
 namespace Net3dBool
 {
@@ -32,6 +35,20 @@ namespace Net3dBool
         public static bool Equals(this Vector3 vf, Vector3Double vd)
         {
             return vd.ToVector3().Equals(vf);
+        }
+
+        /// <summary>
+        /// 带公差判等
+        /// </summary>
+        /// <param name="vector"></param>
+        /// <param name="another"></param>
+        /// <param name="tol"></param>
+        /// <returns></returns>
+        public static bool EqualsTol(this Vector3Double vector, Vector3Double another, double tol)
+        {
+            if (tol < 0) { tol = -tol; }
+            var delta = vector - another;
+            return Math.Abs(delta.x) < tol && Math.Abs(delta.y) < tol && Math.Abs(delta.z) < tol;
         }
         #endregion
 
@@ -77,21 +94,30 @@ namespace Net3dBool
             return result;
         }
 
+        public static Solid ToSolid(this Mesh mesh, Func<Vector3, Vector3Double> transFunc)
+        {
+            using (var meshVs = CollectionPool<Vector3>.ListCell.Create())
+            {
+                mesh.GetVertices(meshVs);
+                using (var meshTs = CollectionPool<int>.ListCell.Create())
+                {
+                    mesh.GetTriangles(meshTs, 0);
+                    using (var solidVs =
+                        CollectionPool<Vector3Double>.ListCell.Create(
+                            from c in meshVs select transFunc(c)))
+                    {
+                        return new Solid(solidVs, meshTs);
+                    }
+                }
+            }
+        }
+
         /// <summary>
         /// 生成<see cref="Solid"/>实例，不换算网格顶点
         /// </summary>
         /// <param name="mesh"></param>
         /// <returns></returns>
-        public static Solid ToSolidLocal(this Mesh mesh)
-        {
-            var meshVecs = mesh.vertices;
-            Vector3Double[] solidVecs = new Vector3Double[meshVecs.Length];
-            for (int i = 0; i < meshVecs.Length; i++)
-            {
-                solidVecs[i] = meshVecs[i].ToVector3Double();
-            }
-            return new Solid(solidVecs, mesh.triangles);
-        }
+        public static Solid ToSolidLocal(this Mesh mesh) => ToSolid(mesh, ToVector3Double);
 
         /// <summary>
         /// 生成 <see cref="Solid"/> 实例，换算网格顶点到世界坐标系，无需变换 <see cref="Solid"/> 实例
@@ -100,14 +126,8 @@ namespace Net3dBool
         /// <returns></returns>
         public static Solid ToSolidInWCS(this MeshFilter meshF)
         {
-            Mesh mesh = meshF.sharedMesh;
-            var meshVecs = mesh.vertices;
-            Vector3Double[] solidVecs = new Vector3Double[meshVecs.Length];
-            for (int i = 0; i < meshVecs.Length; i++)
-            {
-                solidVecs[i] = meshF.transform.TransformPoint(meshVecs[i]).ToVector3Double();
-            }
-            return new Solid(solidVecs, mesh.triangles);
+            return ToSolid(meshF.sharedMesh, transformPoint);
+            Vector3Double transformPoint(Vector3 c) => meshF.transform.TransformPoint(c).ToVector3Double();
         }
 
         /// <summary>
@@ -118,13 +138,8 @@ namespace Net3dBool
         /// <returns></returns>
         public static Solid ToSolidInWCS(this Mesh mesh, Transform root)
         {
-            var meshVecs = mesh.vertices;
-            Vector3Double[] solidVecs = new Vector3Double[meshVecs.Length];
-            for (int i = 0; i < meshVecs.Length; i++)
-            {
-                solidVecs[i] = root.TransformPoint(meshVecs[i]).ToVector3Double();
-            }
-            return new Solid(solidVecs, mesh.triangles);
+            return ToSolid(mesh, transformPoint);
+            Vector3Double transformPoint(Vector3 c) => root.TransformPoint(c).ToVector3Double();
         }
         #endregion
 
@@ -216,5 +231,15 @@ namespace Net3dBool
             return uvs;
         }
         #endregion Reset UV
+
+        #region Collection
+        public static void DisposeAt<T>(this List<T> list, int index) where T:IDisposable
+        {
+            if (index < 0 || index >= list.Count || list.Count == 0 || list == null) { return; }
+            T cell = list[index];
+            cell.Dispose();
+            list.RemoveAt(index);
+        }
+        #endregion
     }
 }

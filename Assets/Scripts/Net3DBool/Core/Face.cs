@@ -35,6 +35,7 @@ Optimized and refactored by: Lars Brubaker (larsbrubaker@matterhackers.com)
 Project: https://github.com/MatterHackers/agg-sharp (an included library)
 */
 
+using Net3dBool.CommonTool;
 using System;
 
 namespace Net3dBool
@@ -70,7 +71,7 @@ namespace Net3dBool
     /// <summary>
     /// 表示 3D 平面（三角面）
     /// </summary>
-    public class Face //: IPrimitive
+    internal class Face : IEquatable<Face>, IDisposable
     {
         /** first vertex */
         public Vertex v1;
@@ -82,14 +83,14 @@ namespace Net3dBool
         /// <summary>
         /// 顶点的几何中心
         /// </summary>
-        public Vector3Double Center { get; private set; }
+        public Vector3Double Center => (v1.Position + v2.Position + v3.Position) / 3;
 
         /** face status relative to a solid  */
-        private readonly static double epsilon = 1e-5f;
+        const double epsilon = 1e-5;
         private enum Side { UP, DOWN, ON, NONE };
 
         private Bound boundCache;
-        private bool cachedBounds = false;
+        private bool cachedBounds;
         public Bound Bound
         {
             get
@@ -102,28 +103,10 @@ namespace Net3dBool
                 return boundCache;
             }
         }
+        public Plane Plane { get; private set; }
+        public Vector3Double PlaneNormal => Plane.planeNormal;
 
-        private Plane planeCache;
-        public Plane Plane
-        {
-            get
-            {
-                if (planeCache == null)
-                {
-                    Vector3Double p1 = v1.Position;
-                    Vector3Double p2 = v2.Position;
-                    Vector3Double p3 = v3.Position;
-                    planeCache = new Plane(p1, p2, p3);
-                }
-                return planeCache;
-            }
-        }
-
-        public Vector3Double PlaneNormal { get { return Plane.planeNormal; } }
-
-        private Status status;
-        public Status Status { get { return status; } }
-
+        public Status Status { get; private set; }
         /** face status if it is still unknown */
         /** face status if it is inside a solid */
         /** face status if it is outside a solid */
@@ -137,11 +120,6 @@ namespace Net3dBool
         //---------------------------------CONSTRUCTORS---------------------------------//
 
         /// <summary>
-        /// Default constructor
-        /// </summary>
-        private Face() { }
-
-        /// <summary>
         /// * Constructs a face with unknown status.
         /// </summary>
         /// <param name="v1">a face vertex</param>
@@ -149,45 +127,51 @@ namespace Net3dBool
         /// <param name="v3">a face vertex</param>
         public Face(Vertex v1, Vertex v2, Vertex v3)
         {
+            InitMember(v1, v2, v3);
+        }
+        public Face InitMember(Vertex v1, Vertex v2, Vertex v3)
+        {
             this.v1 = v1;
             this.v2 = v2;
             this.v3 = v3;
-            Center = (v1.Position + v2.Position + v3.Position) / 3;
 
-            status = Status.UNKNOWN;
+            boundCache = default;
+            cachedBounds = false;
+            Plane = new Plane(v1, v2, v3);
+
+            Status = Status.UNKNOWN;
+            disposedValue = false;
+            return this;
         }
-
-        /// <summary>
-        /// Clones the face object
-        /// </summary>
-        /// <returns>cloned face object</returns>
-        public Face Clone()
+        public static Face GetInstance(Vertex v1, Vertex v2, Vertex v3)
         {
-            Face clone = new Face
-            {
-                v1 = v1.Clone(),
-                v2 = v2.Clone(),
-                v3 = v3.Clone(),
-                Center = Center,
-                status = status
-            };
-            return clone;
+            return ObjectPool<Face>.Create(initFace, construct);
+
+            void initFace(Face c) => c.InitMember(v1, v2, v3);
+            Face construct() => new Face(v1, v2, v3);
         }
 
-        /**
-        * Makes a string definition for the Face object
-        *
-        * @return the string definition
-        */
+        public override bool Equals(object obj)
+        {
+            return Equals(this, obj);
+        }
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
 
         public bool Equals(Face face)
         {
+            if (disposedValue || face.disposedValue) { return false; }
             bool cond1 = v1.Equals(face.v1) && v2.Equals(face.v2) && v3.Equals(face.v3);
             bool cond2 = v1.Equals(face.v2) && v2.Equals(face.v3) && v3.Equals(face.v1);
             bool cond3 = v1.Equals(face.v3) && v2.Equals(face.v1) && v3.Equals(face.v2);
 
             return cond1 || cond2 || cond3;
         }
+
+        public static bool operator ==(Face a, Face b) => a.Equals(b);
+        public static bool operator !=(Face a, Face b) => !a.Equals(b);
 
         public double GetArea()
         {
@@ -214,7 +198,8 @@ namespace Net3dBool
         public void RayTraceClassify(Object3D obj)
         {
             Line ray = new Line(PlaneNormal, Center);  // 射线从面的几何中心发出，方向为法线方向
-            Face closestFace = null;
+            Face closet = default;
+            bool foundCloset = false;
             double closestDistance;
             bool success;
             do
@@ -243,7 +228,8 @@ namespace Net3dBool
                             else if (face.ContainsPoint(intersectionPoint))
                             {
                                 // 面重合
-                                closestFace = face;
+                                closet = face;
+                                foundCloset = true;
                                 closestDistance = 0;
                                 break;
                             }
@@ -253,24 +239,25 @@ namespace Net3dBool
                             if (distance < closestDistance && face.ContainsPoint(intersectionPoint))
                             {
                                 closestDistance = distance;
-                                closestFace = face;  // 当前的面时最近的平面
+                                closet = face;  // 当前的面时最近的平面
+                                foundCloset = true;
                             }
                         }
                     }
                 }
             } while (!success);
 
-            if (closestFace == null) { status = Status.OUTSIDE; }  // 没有找到面，自己是外部面
+            if (!foundCloset) { Status = Status.OUTSIDE; }  // 没有找到面，自己是外部面
             else // 由离自己最近的面，检查方向
             {
-                var dot = Vector3Double.Dot(closestFace.PlaneNormal, ray.Direction);
+                var dot = Vector3Double.Dot(closet.PlaneNormal, ray.Direction);
                 if (Math.Abs(closestDistance) < epsilon)  // 距离为零，这个面和自己重合
                 {
-                    if (dot > epsilon) { status = Status.SAME; }
-                    else if (dot < -epsilon) { status = Status.OPPOSITE; }
+                    if (dot > epsilon) { Status = Status.SAME; }
+                    else if (dot < -epsilon) { Status = Status.OPPOSITE; }
                 }
-                else if (dot > epsilon) { status = Status.INSIDE; }  // 不重合，同向，在参数物件内部
-                else if (dot < -epsilon) { status = Status.OUTSIDE; }  // 不重合，反向，在参数物件外部
+                else if (dot > epsilon) { Status = Status.INSIDE; }  // 不重合，同向，在参数物件内部
+                else if (dot < -epsilon) { Status = Status.OUTSIDE; }  // 不重合，反向，在参数物件外部
             }
         }
 
@@ -286,17 +273,17 @@ namespace Net3dBool
 
             if (status1 == Status.INSIDE || status1 == Status.OUTSIDE)
             {
-                status = status1;
+                Status = status1;
                 return true;
             }
             else if (status2 == Status.INSIDE || status2 == Status.OUTSIDE)
             {
-                status = status2;
+                Status = status2;
                 return true;
             }
             else if (status3 == Status.INSIDE || status3 == Status.OUTSIDE)
             {
-                status = status3;
+                Status = status3;
                 return true;
             }
             else { return false; }
@@ -411,5 +398,42 @@ namespace Net3dBool
                     ((result1 == Side.DOWN) || (result2 == Side.DOWN) || (result3 == Side.DOWN))) ||
                 (result1 == Side.ON) || (result2 == Side.ON) || (result3 == Side.ON);
         }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // 要检测冗余调用
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // TODO: 释放托管状态(托管对象)。
+                    v1 = v2 = v3 = null;
+                    ObjectPool<Face>.Recycle(this);
+                }
+
+                // TODO: 释放未托管的资源(未托管的对象)并在以下内容中替代终结器。
+                // TODO: 将大型字段设置为 null。
+
+                disposedValue = true;
+            }
+        }
+
+        // TODO: 仅当以上 Dispose(bool disposing) 拥有用于释放未托管资源的代码时才替代终结器。
+        // ~Face() {
+        //   // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+        //   Dispose(false);
+        // }
+
+        // 添加此代码以正确实现可处置模式。
+        public void Dispose()
+        {
+            // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+            Dispose(true);
+            // TODO: 如果在以上内容中替代了终结器，则取消注释以下行。
+            // GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }

@@ -26,13 +26,14 @@ The views and conclusions contained in the software and documentation are those
 of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
+using System;
 
 namespace Net3dBool
 {
     /// <summary>
     /// 用 法线方向 和 坐标系原点到平面距离 描述的平面
     /// </summary>
-    public class Plane
+    public struct Plane : IEquatable<Plane>
     {
         /// <summary>
         /// 从原点到平面的距离？
@@ -71,7 +72,7 @@ namespace Net3dBool
             var normalDotRayDirection = Vector3Double.Dot(planeNormal, ray.directionNormal);
 
             // the ray is parallel to the plane
-            if (normalDotRayDirection < TreatAsZero && normalDotRayDirection > -TreatAsZero) { return double.PositiveInfinity; }
+            if (Math.Abs(normalDotRayDirection) < TreatAsZero) { return double.PositiveInfinity; }
 
             if (normalDotRayDirection < 0) { inFront = true; }
             return (distanceToPlaneFromOrigin - Vector3Double.Dot(planeNormal, ray.origin)) / normalDotRayDirection;
@@ -82,8 +83,8 @@ namespace Net3dBool
             var normalDotRayDirection = Vector3Double.Dot(planeNormal, lineDirection);
 
             // the ray is parallel to the plane
-            if (normalDotRayDirection < TreatAsZero && normalDotRayDirection > -TreatAsZero) { return double.PositiveInfinity; }
-            return (distanceToPlaneFromOrigin - Vector3Double.Dot(planeNormal, pointOnLine)) / normalDotRayDirection;
+            return Math.Abs(normalDotRayDirection) < TreatAsZero ? double.PositiveInfinity :
+                (distanceToPlaneFromOrigin - Vector3Double.Dot(planeNormal, pointOnLine)) / normalDotRayDirection;
         }
 
         public bool RayHitPlane(Ray ray, out double distanceToHit, out bool hitFrontOfPlane)
@@ -93,7 +94,7 @@ namespace Net3dBool
 
             var normalDotRayDirection = Vector3Double.Dot(planeNormal, ray.directionNormal);
             //  the ray is parallel to the plane
-            if (normalDotRayDirection < TreatAsZero && normalDotRayDirection > -TreatAsZero) { return false; }
+            if (Math.Abs(normalDotRayDirection) < TreatAsZero) { return false; }
 
             if (normalDotRayDirection < 0) { hitFrontOfPlane = true; }
 
@@ -143,11 +144,16 @@ namespace Net3dBool
             return false;
         }
 
+        public bool Equals(Plane plane)
+        {
+            return plane.distanceToPlaneFromOrigin == distanceToPlaneFromOrigin &&
+                plane.planeNormal.Equals(planeNormal, TreatAsZero);
+        }
+        public static bool operator ==(Plane a, Plane b) => a.Equals(b);
+        public static bool operator !=(Plane a, Plane b) => !a.Equals(b);
         public override bool Equals(object obj)
         {
-            return obj is Plane && 
-                (obj as Plane).distanceToPlaneFromOrigin == distanceToPlaneFromOrigin && 
-                (obj as Plane).planeNormal.Equals(planeNormal, TreatAsZero);
+            return (Plane)obj == this;
         }
 
         public override int GetHashCode()

@@ -35,12 +35,14 @@ Optimized and refactored by: Lars Brubaker (larsbrubaker@matterhackers.com)
 Project: https://github.com/MatterHackers/agg-sharp (an included library)
 */
 
+using System.Collections.Generic;
+
 namespace Net3dBool
 {
     /// <summary>
     /// 表示 3D 物件在坐标系中的包围盒
     /// </summary>
-    public class Bound
+    public struct Bound
     {
         /** maximum from the x coordinate */
         private double xMax;
@@ -80,13 +82,13 @@ namespace Net3dBool
         /// 计算 3D 物体的包围盒
         /// </summary>
         /// <param name="vertices"></param>
-        public Bound(Vector3Double[] vertices)
+        public Bound(IList<Vector3Double> vertices)
         {
             xMax = xMin = vertices[0].x;
             yMax = yMin = vertices[0].y;
             zMax = zMin = vertices[0].z;
 
-            for (int i = 1; i < vertices.Length; i++) { CheckVertex(vertices[i]); }
+            for (int i = 1; i < vertices.Count; i++) { CheckVertex(vertices[i]); }
         }
 
         //----------------------------------OVERRIDES-----------------------------------//

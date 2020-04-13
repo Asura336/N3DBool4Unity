@@ -36,6 +36,7 @@ Project: https://github.com/MatterHackers/agg-sharp (an included library)
 */
 
 using System;
+using System.Collections.Generic;
 
 namespace Net3dBool
 {
@@ -61,14 +62,16 @@ namespace Net3dBool
         }
 
         /// <summary>
-        /// 按照顶点信息和三角形信息生成实例
+        /// 按照顶点信息和三角形信息生成实例，复制参数的内容
         /// </summary>
         /// <param name="vertices">顶点坐标集合</param>
         /// <param name="triangles">长度需要为 3 的倍数</param>
-        public Solid(Vector3Double[] vertices, int[] triangles)
-            : this()
+        public Solid(IList<Vector3Double> vertices, IList<int> triangles)
         {
-            setData(vertices, triangles);
+            this.vertices = new Vector3Double[vertices.Count];
+            this.triangles = new int[triangles.Count];
+            for (int i = 0; i < vertices.Count; i++) { this.vertices[i] = vertices[i]; }
+            triangles.CopyTo(this.triangles, 0);
         }
 
         //---------------------------------------GETS-----------------------------------//
@@ -86,6 +89,8 @@ namespace Net3dBool
             }
         }
 
+        public void GetVertices(List<Vector3Double> destination) => destination.AddRange(vertices);
+
         /// <summary>
         /// 返回顶点三角形序列的副本
         /// </summary>
@@ -99,6 +104,8 @@ namespace Net3dBool
             }
         }
 
+        public void GetTriangles(List<int> destination) => destination.AddRange(triangles);
+
         /// <summary>
         /// 判断物体信息为空
         /// </summary>
@@ -106,22 +113,6 @@ namespace Net3dBool
         public bool isEmpty()
         {
             return triangles.Length == 0;
-        }
-
-        //---------------------------------------SETS-----------------------------------//
-
-        /// <summary>
-        /// 重设物体信息
-        /// </summary>
-        public void setData(Vector3Double[] vertices, int[] indices)
-        {
-            this.vertices = new Vector3Double[vertices.Length];
-            triangles = new int[indices.Length];
-            if (indices.Length != 0)
-            {
-                for (int i = 0; i < vertices.Length; i++) { this.vertices[i] = vertices[i]; }
-                Array.Copy(indices, 0, triangles, 0, indices.Length);
-            }
         }
 
         //-------------------------GEOMETRICAL_TRANSFORMATIONS-------------------------//

@@ -42,12 +42,12 @@ namespace Net3dBool
     /// <summary>
     /// 由起点位置和方向表示的 3D 直线或射线
     /// </summary>
-    public class Line
+    internal struct Line
     {
         /// <summary>
         /// 判断相等的容差
         /// </summary>
-        private readonly static double EqualityTolerance = 1e-10;
+        const double EqualityTolerance = 1e-10;
         private static Random random = new Random();
 
         public Vector3Double StartPoint { get { return startPoint; } }
@@ -103,6 +103,10 @@ namespace Net3dBool
                     };
                 }
             }
+            else
+            {
+                startPoint = default;
+            }
             Direction.Normalize();
         }
 
@@ -116,18 +120,6 @@ namespace Net3dBool
             Direction = direction;
             startPoint = point;
             direction.Normalize();
-        }
-
-        private Line() { }
-
-        public Line Clone()
-        {
-            Line clone = new Line
-            {
-                Direction = Direction,
-                startPoint = startPoint
-            };
-            return clone;
         }
 
         /// <summary>

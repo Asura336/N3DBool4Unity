@@ -9,7 +9,8 @@ namespace N3dBoolExample {
         public MeshFilter meshFa;
         public MeshFilter meshFb;
 
-        private void Start()
+        [ContextMenu("difference")]
+        public void Difference()
         {
             var faCollider = meshFa.GetComponent<MeshCollider>();
 
@@ -18,7 +19,15 @@ namespace N3dBoolExample {
             faCollider.sharedMesh = meshFa.mesh;
 
             faCollider.convex = true;
-            meshFa.gameObject.AddComponent<Rigidbody>();
+
+            if (!meshFa.GetComponent<Rigidbody>())
+            {
+                meshFa.gameObject.AddComponent<Rigidbody>();
+            }
+        }
+        private void Start()
+        {
+            Difference();
         }
     }
 }

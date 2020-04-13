@@ -35,7 +35,10 @@ Optimized and refactored by: Lars Brubaker (larsbrubaker@matterhackers.com)
 Project: https://github.com/MatterHackers/agg-sharp (an included library)
 */
 
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using Net3dBool.CommonTool;
 
 namespace Net3dBool
 {
@@ -44,7 +47,7 @@ namespace Net3dBool
     /// 在构造函数中提交两个<see cref="Solid"/>实例；
     /// 每个布尔运算的方法都会返回一个新的<see cref="Solid"/>实例存放运算结果；
     /// </summary>
-    public class BooleanModeller
+    public class BooleanModeller : IDisposable
     {
         /** solid where boolean operations will be applied */
         private Object3D object1;
@@ -73,24 +76,6 @@ namespace Net3dBool
         }
 
         private BooleanModeller() { }
-
-        //----------------------------------OVERRIDES-----------------------------------//
-
-        /**
-        * Clones the BooleanModeller object
-        *
-        * @return cloned BooleanModeller object
-        */
-
-        public BooleanModeller Clone()
-        {
-            BooleanModeller clone = new BooleanModeller
-            {
-                object1 = object1.Clone(),
-                object2 = object2.Clone()
-            };
-            return clone;
-        }
 
         //-------------------------------BOOLEAN_OPERATIONS-----------------------------//
 
@@ -138,18 +123,22 @@ namespace Net3dBool
         /// <returns></returns>
         private Solid ComposeSolid(Status faceStatus1, Status faceStatus2, Status faceStatus3)
         {
-            var vertices = new List<Vertex>();
-            var indices = new List<int>();
+            using (var vertices = CollectionPool<Vertex>.ListCell.Create())
+            {
+                using (var indices = CollectionPool<int>.ListCell.Create())
+                {
+                    // group the elements of the two solids whose faces fit with the desired status
+                    GroupObjectComponents(object1, vertices, indices, faceStatus1, faceStatus2);
+                    GroupObjectComponents(object2, vertices, indices, faceStatus3, faceStatus3);
 
-            // group the elements of the two solids whose faces fit with the desired status
-            GroupObjectComponents(object1, vertices, indices, faceStatus1, faceStatus2);
-            GroupObjectComponents(object2, vertices, indices, faceStatus3, faceStatus3);
-
-            Vector3Double[] verticesArray = new Vector3Double[vertices.Count];
-            for (int i = 0; i < vertices.Count; i++) { verticesArray[i] = vertices[i].Position; }
-
-            //returns the solid containing the grouped elements
-            return new Solid(verticesArray, indices.ToArray());
+                    using (var verticesPos =
+                        CollectionPool<Vector3Double>.ListCell.Create(from c in vertices select c.Position))
+                    {
+                        //returns the solid containing the grouped elements
+                        return new Solid(verticesPos, indices);
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -162,26 +151,68 @@ namespace Net3dBool
         /// <param name="faceStatus2">第二个筛选条件</param>
         private void GroupObjectComponents(Object3D obj, List<Vertex> vertices, List<int> indices, Status faceStatus1, Status faceStatus2)
         {
-            for (int i = 0; i < obj.GetNumFaces(); i++)
+            using (var faceVs = CollectionPool<Vertex>.ListCell.Create(3))
             {
-                var face = obj.GetFace(i);
-                if (face.Status == faceStatus1 || face.Status == faceStatus2)  // if the face status fits with the desired status...
+                for (int faceCount = 0; faceCount < obj.GetNumFaces(); faceCount++)
                 {
-                    Vertex[] faceVerts = { face.v1, face.v2, face.v3 };  // adds the face elements into the arrays
-                    for (int j = 0; j < faceVerts.Length; j++)
+                    var face = obj.GetFace(faceCount);
+                    if (face.Status == faceStatus1 || face.Status == faceStatus2)  // if the face status fits with the desired status...
                     {
-                        if (vertices.Contains(faceVerts[j]))
+                        faceVs[0] = face.v1;
+                        faceVs[1] = face.v2;
+                        faceVs[2] = face.v3;
+                        for (int triIndex = 0; triIndex < 3; triIndex++)
                         {
-                            indices.Add(vertices.IndexOf(faceVerts[j]));
-                        }
-                        else
-                        {
-                            indices.Add(vertices.Count);
-                            vertices.Add(faceVerts[j]);
+                            if (vertices.Contains(faceVs[triIndex]))
+                            {
+                                indices.Add(vertices.IndexOf(faceVs[triIndex]));
+                            }
+                            else
+                            {
+                                indices.Add(vertices.Count);
+                                vertices.Add(faceVs[triIndex]);
+                            }
                         }
                     }
                 }
             }
         }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // 要检测冗余调用
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // TODO: 释放托管状态(托管对象)。
+                    object1.Dispose();
+                    object2.Dispose();
+                }
+
+                // TODO: 释放未托管的资源(未托管的对象)并在以下内容中替代终结器。
+                // TODO: 将大型字段设置为 null。
+
+                disposedValue = true;
+            }
+        }
+
+        // TODO: 仅当以上 Dispose(bool disposing) 拥有用于释放未托管资源的代码时才替代终结器。
+        // ~BooleanModeller() {
+        //   // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+        //   Dispose(false);
+        // }
+
+        // 添加此代码以正确实现可处置模式。
+        public void Dispose()
+        {
+            // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+            Dispose(true);
+            // TODO: 如果在以上内容中替代了终结器，则取消注释以下行。
+            // GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }

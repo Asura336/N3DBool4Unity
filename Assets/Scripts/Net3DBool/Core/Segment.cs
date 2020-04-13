@@ -44,7 +44,7 @@ namespace Net3dBool
     /// <summary>
     /// 定义平面之间交线的线段
     /// </summary>
-    public class Segment
+    internal struct Segment
     {
         /// <summary>
         /// 缓存两平面的交线
@@ -88,7 +88,7 @@ namespace Net3dBool
         /// <summary>
         /// 线段起始点到平面顶点的距离
         /// </summary>
-        public double StartDist { get; private set; }
+        public double StartDistance { get; private set; }
 
         /// <summary>
         /// 线段结束点到平面顶点的距离
@@ -128,7 +128,18 @@ namespace Net3dBool
         public Segment(Line line, Face face, int sign1, int sign2, int sign3)
         {
             this.line = line;
-            NumEndsSet = 0;
+
+            NumEndsSet = default;
+            StartVertex = default;
+            EndVertex = default;
+            StartPosition = default;
+            EndPosition = default;
+            StartDistance = default;
+            EndDistance = default;
+            StartType = default;
+            EndType = default;
+            IntermediateType = default;
+
             if (sign1 == 0)  // 点1 在平面上，是交线的端点
             {
                 SetVertex(face.v1);
@@ -161,30 +172,6 @@ namespace Net3dBool
             }
         }
 
-        private Segment() { }
-
-        //-----------------------------------OVERRIDES----------------------------------//
-
-        public Segment Clone()
-        {
-            Segment clone = new Segment
-            {
-                line = line,
-                NumEndsSet = NumEndsSet,
-                StartDist = StartDist,
-                EndDistance = EndDistance
-            };
-            clone.StartDist = StartType;
-            clone.IntermediateType = IntermediateType;
-            clone.EndType = EndType;
-            clone.StartVertex = StartVertex;
-            clone.EndVertex = EndVertex;
-            clone.StartPosition = StartPosition;
-            clone.EndPosition = EndPosition;
-
-            return clone;
-        }
-
         //------------------------------------OTHERS------------------------------------//
 
         /// <summary>
@@ -194,7 +181,7 @@ namespace Net3dBool
         /// <returns></returns>
         public bool Intersect(Segment segment)
         {
-            return !(EndDistance < segment.StartDist + TOL || segment.EndDistance < StartDist + TOL);
+            return !(EndDistance < segment.StartDistance + TOL || segment.EndDistance < StartDistance + TOL);
         }
 
         //---------------------------------PRIVATES-------------------------------------//
@@ -212,7 +199,7 @@ namespace Net3dBool
             {
                 StartVertex = vertex;
                 StartType = VERTEX;
-                StartDist = line.ComputePointToPointDistance(vertex.Position);
+                StartDistance = line.ComputePointToPointDistance(vertex.Position);
                 StartPosition = StartVertex.Position;
                 NumEndsSet++;
                 return true;
@@ -233,7 +220,7 @@ namespace Net3dBool
                 else if (StartType == VERTEX) { IntermediateType = EDGE; }
 
                 //the ending point distance should be smaller than  starting point distance 
-                if (StartDist > EndDistance) { SwapEnds(); }
+                if (StartDistance > EndDistance) { SwapEnds(); }
 
                 return true;
             }
@@ -259,7 +246,7 @@ namespace Net3dBool
                 StartVertex = vertex1;
                 StartType = EDGE;
                 StartPosition = line.ComputeLineIntersection(edgeLine);
-                StartDist = line.ComputePointToPointDistance(StartPosition);
+                StartDistance = line.ComputePointToPointDistance(StartPosition);
                 IntermediateType = FACE;
                 NumEndsSet++;
                 return true;
@@ -274,7 +261,7 @@ namespace Net3dBool
                 NumEndsSet++;
 
                 //the ending point distance should be smaller than  starting point distance 
-                if (StartDist > EndDistance) { SwapEnds(); }
+                if (StartDistance > EndDistance) { SwapEnds(); }
 
                 return true;
             }
@@ -284,8 +271,8 @@ namespace Net3dBool
         /** Swaps the starting point and the ending point */
         private void SwapEnds()
         {
-            double distTemp = StartDist;
-            StartDist = EndDistance;
+            double distTemp = StartDistance;
+            StartDistance = EndDistance;
             EndDistance = distTemp;
 
             int typeTemp = StartType;
